@@ -1,118 +1,90 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import joblib
-import time
+import pickle
 
-st.set_page_config(page_title="Prediksi Gangguan Tidur", page_icon="😴", layout="wide")
-# Fungsi untuk memuat model yang telah dilatih
-# Menggunakan cache untuk efisiensi, agar model tidak dimuat ulang setiap kali ada interaksi
-@st.cache_resource
-def load_model():
-    """Memuat pipeline model dari file joblib."""
-    try:
-        model = joblib.load('best_sleep_disorder_model (1).joblib')
-        return model
-    except FileNotFoundError:
-        st.error("File model 'best_sleep_disorder_model (1).joblib' tidak ditemukan. Pastikan file tersebut berada di direktori yang sama.")
-        return None
-    except Exception as e:
-        st.error(f"Terjadi kesalahan saat memuat model: {e}")
-        return None
+# --- Muat Pipeline yang Telah Dilatih ---
+try:
+    with open('pipeline.pkl', 'rb') as f:
+        pipeline = pickle.load(f)
+except FileNotFoundError:
+    st.error("File 'pipeline.pkl' tidak ditemukan. Mohon jalankan 'create_pipeline.py' terlebih dahulu untuk membuatnya.")
+    st.stop()
+except Exception as e:
+    st.error(f"Terjadi kesalahan saat memuat pipeline: {e}")
+    st.stop()
 
-# Memuat model
-model_pipeline = load_model()
 
-# Konfigurasi halaman Streamlit
+# --- Antarmuka Aplikasi Streamlit ---
 
-# Judul dan deskripsi aplikasi
-st.title("Aplikasi Prediksi Gangguan Tidur 😴")
-st.markdown("""
-Aplikasi ini menggunakan model *Machine Learning* (SVM) untuk memprediksi kemungkinan seseorang mengalami gangguan tidur 
-(Insomnia atau Sleep Apnea) berdasarkan beberapa parameter kesehatan dan gaya hidup.
-"""
+# Konfigurasi Halaman
+st.set_page_config(
+    page_title="Prediktor Gangguan Tidur",
+    page_icon="😴",
+    layout="wide"
 )
-st.markdown("---")
+
+# Judul Aplikasi
+st.title("Aplikasi Prediksi Gangguan Tidur 😴")
+st.write(
+    "Aplikasi ini memprediksi kemungkinan adanya gangguan tidur (Insomnia atau Sleep Apnea) "
+    "berdasarkan faktor kunci kesehatan dan gaya hidup. Isi detail di sidebar untuk mendapatkan prediksi."
+)
+
+# --- Sidebar untuk Input Pengguna ---
+st.sidebar.header("Masukkan Metrik Kesehatan Anda")
+
+# Membuat kolom input di sidebar
+age = st.sidebar.number_input('Usia', min_value=18, max_value=100, value=30)
+sleep_duration = st.sidebar.slider('Durasi Tidur (jam)', 4.0, 10.0, 7.5, 0.1)
+heart_rate = st.sidebar.slider('Detak Jantung (bpm)', 60, 100, 70)
+daily_steps = st.sidebar.slider('Langkah Harian', 1000, 15000, 8000)
+
+systolic_bp = st.sidebar.slider('Tekanan Darah Sistolik (mmHg)', 90, 180, 120)
+diastolic_bp = st.sidebar.slider('Tekanan Darah Diastolik (mmHg)', 60, 120, 80)
+
+gender = st.sidebar.selectbox('Jenis Kelamin', ('Laki-laki', 'Perempuan'))
+# Mengonversi input jenis kelamin ke format yang sesuai dengan data training ('Male'/'Female')
+gender_english = 'Male' if gender == 'Laki-laki' else 'Female'
+
+bmi_category = st.sidebar.selectbox('Kategori BMI', ('Normal', 'Overweight', 'Obesitas'))
+# Mengonversi input kategori BMI ke format yang sesuai dengan data training ('Normal'/'Overweight'/'Obese')
+bmi_english = 'Obese' if bmi_category == 'Obesitas' else bmi_category
 
 
-# --- UI untuk Input Pengguna ---
-st.sidebar.header("Masukkan Data Anda")
+# --- Logika Prediksi ---
 
-# Membuat form untuk input agar lebih terstruktur
-with st.sidebar.form("prediction_form"):
-    # Input data dari pengguna menggunakan komponen sidebar
-    gender = st.selectbox("Jenis Kelamin", ["Male", "Female"])
-    age = st.number_input("Usia", min_value=1, max_value=100, value=30, step=1)
-    sleep_duration = st.number_input("Durasi Tidur (jam)", min_value=0.0, max_value=24.0, value=7.0, step=0.1)
-    
-    st.markdown("##### Tekanan Darah")
-    systolic_bp = st.number_input("Sistolik (cth: 120)", min_value=50, max_value=250, value=120)
-    diastolic_bp = st.number_input("Diastolik (cth: 80)", min_value=30, max_value=150, value=80)
-    
-    st.markdown("##### Metrik Lainnya")
-    heart_rate = st.number_input("Detak Jantung (bpm)", min_value=40, max_value=150, value=70)
-    daily_steps = st.number_input("Langkah Harian", min_value=0, max_value=20000, value=5000)
-    bmi_category = st.selectbox("Kategori BMI", ["Normal", "Overweight", "Obese"])
+# Tombol Prediksi
+if st.sidebar.button("Prediksi Gangguan Tidur", use_container_width=True):
+    # Membuat DataFrame dari input pengguna
+    input_data = pd.DataFrame(
+        [[age, gender_english, sleep_duration, bmi_english, heart_rate, daily_steps, systolic_bp, diastolic_bp]],
+        columns=['Age', 'Gender', 'Sleep Duration', 'BMI Category', 'Heart Rate', 'Daily Steps', 'Systolic BP', 'Diastolic BP']
+    )
 
-    # Tombol untuk melakukan prediksi
-    submit_button = st.form_submit_button(label="🔮 Prediksi Sekarang")
+    # Melakukan prediksi
+    try:
+        prediction = pipeline.predict(input_data)[0]
+        prediction_proba = pipeline.predict_proba(input_data)
+        
+        # Menampilkan hasil prediksi di area utama
+        st.subheader("Hasil Prediksi")
+        
+        if prediction == 'None':
+            st.success(f"**Prediksi: Tidak Ada Gangguan Tidur**")
+            st.write("Berdasarkan data yang diberikan, Anda kemungkinan besar tidak memiliki gangguan tidur umum.")
+        else:
+            st.warning(f"**Prediksi: {prediction}**")
+            st.write(f"Model menyarankan adanya potensi **{prediction}**. Sangat disarankan untuk berkonsultasi dengan profesional kesehatan untuk diagnosis formal.")
+        
+        # Menampilkan skor probabilitas
+        st.subheader("Probabilitas Prediksi")
+        proba_df = pd.DataFrame(
+            prediction_proba,
+            columns=pipeline.classes_,
+            index=['Probabilitas']
+        )
+        st.dataframe(proba_df.style.format("{:.2%}"))
 
-
-# --- Logika Prediksi dan Tampilan Hasil ---
-if submit_button and model_pipeline is not None:
-    # Mengumpulkan data input menjadi DataFrame
-    # Urutan kolom harus sesuai dengan saat model dilatih
-    input_data = {
-        'Gender': [gender],
-        'Age': [age],
-        'Sleep Duration': [sleep_duration],
-        'Heart Rate': [heart_rate],
-        'Daily Steps': [daily_steps],
-        'Systolic BP': [systolic_bp],
-        'Diastolic BP': [diastolic_bp],
-        'BMI Category': [bmi_category]
-    }
-    
-    # Membuat DataFrame dari input
-    input_df = pd.DataFrame(input_data)
-    
-    # Menampilkan data input pengguna dalam format yang rapi
-    st.subheader("Data yang Anda Masukkan:")
-    st.dataframe(input_df)
-
-    input_df['Age_SleepDuration_Interaction'] = input_df['Age'] * input_df['Sleep Duration']
-    input_df['Daily_Steps_Log'] = np.log(input_df['Daily Steps'] + 1)
-
-
-    # Melakukan prediksi menggunakan pipeline model
-    with st.spinner('Menganalisis data Anda...'):
-        time.sleep(2) # Simulasi proses analisis
-        prediction = model_pipeline.predict(input_df)
-        prediction_proba = None
-        # Cek apakah model memiliki method predict_proba untuk menampilkan probabilitas
-        if hasattr(model_pipeline.named_steps['classifier'], "predict_proba"):
-            # Karena ada SMOTE, probabilitas perlu dihitung dengan hati-hati
-            # Untuk SVM dengan kernel default 'rbf', probability=False by default.
-            # Jika Anda melatih ulang dengan probability=True, Anda bisa menggunakan kode di bawah.
-            # prediction_proba = model_pipeline.predict_proba(input_df)
-            pass
-
-    st.subheader("Hasil Prediksi:")
-    
-    # Menampilkan hasil prediksi
-    if prediction[0] == 'None':
-        st.success("✅ **Normal**: Berdasarkan data Anda, kemungkinan besar Anda tidak mengalami gangguan tidur.")
-    elif prediction[0] == 'Sleep Apnea':
-        st.warning("⚠️ **Sleep Apnea**: Ada indikasi Anda mengalami *Sleep Apnea*. Disarankan untuk berkonsultasi dengan dokter untuk diagnosis lebih lanjut.")
-    elif prediction[0] == 'Insomnia':
-        st.warning("⚠️ **Insomnia**: Ada indikasi Anda mengalami *Insomnia*. Menjaga kebiasaan tidur yang baik dan berkonsultasi dengan ahli bisa membantu.")
-    
-    # Tampilkan probabilitas jika ada
-    if prediction_proba is not None:
-        st.write("Probabilitas Prediksi:")
-        proba_df = pd.DataFrame(prediction_proba, columns=model_pipeline.classes_)
-        st.dataframe(proba_df)
-
-elif submit_button and model_pipeline is None:
-    st.error("Model tidak dapat digunakan. Silakan periksa pesan kesalahan di atas.")
+    except Exception as e:
+        st.error(f"Terjadi kesalahan saat prediksi: {e}")
 
