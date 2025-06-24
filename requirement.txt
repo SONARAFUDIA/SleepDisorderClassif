@@ -4,3 +4,5 @@ numpy
 scikit-learn
 imbalanced-learn
 joblib
+freeglut3-dev
+libgtk2.0-dev
