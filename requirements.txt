@@ -2,3 +2,6 @@ streamlit==1.35.0
 joblib
 scikit-learn
 pandas
+imblearn 
+imbalance-learn
+numpy
