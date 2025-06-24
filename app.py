@@ -11,7 +11,7 @@ st.set_page_config(page_title="Prediksi Gangguan Tidur", page_icon="😴", layou
 def load_model():
     """Memuat pipeline model dari file joblib."""
     try:
-        model = joblib.load('best_sleep_disorder_model.joblib')
+        model = joblib.load('model/best_sleep_disorder_model.joblib')
         return model
     except FileNotFoundError:
         st.error("File model 'best_sleep_disorder_model.joblib' tidak ditemukan. Pastikan file tersebut berada di direktori yang sama.")
